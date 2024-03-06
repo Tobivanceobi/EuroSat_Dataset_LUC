@@ -99,16 +99,6 @@ class EuroSatResNet(pl.LightningModule):
         }
 
     def adjust_learning_rate(self, new_lr):
-        optimizers = self.optimizers()
-
-        # Check if optimizers is a list of optimizers or a single optimizer
-        if not isinstance(optimizers, list):
-            optimizers = [optimizers]  # Wrap the single optimizer in a list for consistency
-
-        for optimizer in optimizers:
-            for param_group in optimizer.param_groups:
-                param_group['lr'] = new_lr
-
         self.learning_rate = new_lr
-
+        self.configure_optimizers()
 
