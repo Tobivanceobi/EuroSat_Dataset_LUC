@@ -29,11 +29,13 @@ class EuroSatResNet(pl.LightningModule):
         self.learning_rate = learning_rate
         self.criterion = nn.CrossEntropyLoss()
 
+        self.accuracy = 0
+
         self.ep_out = []
         self.ep_true = []
 
     def unfreez_children_layers(self, n_layers):
-        children = list(self.model.model.children())
+        children = list(self.model.children())
         children.reverse()
         children = children[1:n_layers + 1]
 
@@ -72,13 +74,13 @@ class EuroSatResNet(pl.LightningModule):
         self.ep_true.append(labels.cpu().numpy())
 
         self.log('val_loss', loss, prog_bar=True, on_step=False, on_epoch=True)
+        self.log('val_accuracy', self.accuracy, prog_bar=True, on_step=False, on_epoch=True)
 
-    def on_train_epoch_end(self):
+    def on_validation_epoch_end(self):
         all_preds = np.concatenate(self.ep_out)
         all_true = np.concatenate(self.ep_true)
         correct = np.sum(all_preds == all_true)
-        accuracy = correct / len(all_true)
-        self.log('val_accuracy', accuracy, prog_bar=True, on_step=False, on_epoch=True)
+        self.accuracy = correct / len(all_true)
         self.ep_out = []
         self.ep_true = []
 
@@ -97,9 +99,16 @@ class EuroSatResNet(pl.LightningModule):
         }
 
     def adjust_learning_rate(self, new_lr):
-        for optimizer in self.optimizers():
+        optimizers = self.optimizers()
+
+        # Check if optimizers is a list of optimizers or a single optimizer
+        if not isinstance(optimizers, list):
+            optimizers = [optimizers]  # Wrap the single optimizer in a list for consistency
+
+        for optimizer in optimizers:
             for param_group in optimizer.param_groups:
                 param_group['lr'] = new_lr
+
         self.learning_rate = new_lr
 
 

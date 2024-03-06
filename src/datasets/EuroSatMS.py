@@ -64,8 +64,9 @@ class EuroSatMS(Dataset):
 
         if self.transform:
             image = Image.fromarray(image.astype('uint8'))
-            image = self.augment(image)
             image = self.transform(image)
+            for t in self.augment:
+                image = t(image)
         else:
             image = torch.tensor(image, dtype=torch.float32).permute(2, 0, 1)
 
