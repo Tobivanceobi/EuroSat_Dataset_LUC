@@ -1,0 +1,11 @@
+# Lightning logs
+lightning_logs/
+
+# Virtual environment
+.venv/
+
+# Data EuroSat and Kaggle test
+data/
+
+*.png
+*.csv
