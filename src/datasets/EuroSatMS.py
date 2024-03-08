@@ -48,6 +48,8 @@ class EuroSatMS(Dataset):
 
         image = (image - rgb_min) / (rgb_max - rgb_min)
 
+        image = image.transpose(2, 0, 1)
+
         label = self.dataframe.iloc[idx, 1]
         target = self.enc.transform(np.array([label]).reshape(-1, 1)).toarray()
 
@@ -61,14 +63,13 @@ class EuroSatMS(Dataset):
             idx = idx.tolist()
 
         image, target = self.samples[idx]
+        image = torch.tensor(image, dtype=torch.float32)
 
         if self.transform:
-            image = Image.fromarray(image.astype('uint8'))
             image = self.transform(image)
-            for t in self.augment:
-                image = t(image)
-        else:
-            image = torch.tensor(image, dtype=torch.float32).permute(2, 0, 1)
+
+        if self.augment:
+            image = self.augment(image).squeeze(0)
 
         target = torch.tensor(target.flatten(), dtype=torch.float32)
 

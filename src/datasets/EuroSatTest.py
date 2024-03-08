@@ -18,10 +18,11 @@ c = bcolors()
 
 
 class EuroSatTestSet(Dataset):
-    def __init__(self, root_dir, select_chan=[3, 2, 1], transform=None, n_jobs=-4):
+    def __init__(self, root_dir, select_chan=[3, 2, 1], transform=None, augment=None, n_jobs=-4):
         self.root_dir = root_dir
         self.files = os.listdir(root_dir)
         self.transform = transform
+        self.augment = augment
         self.select_chan = select_chan
 
         self.enc = load_object("data/on_hot_encoder")
@@ -47,11 +48,7 @@ class EuroSatTestSet(Dataset):
 
         image = (image - rgb_min) / (rgb_max - rgb_min)
 
-        if self.transform:
-            image = Image.fromarray(image.astype('uint8'))
-            image = self.transform(image)
-
-        image = torch.tensor(image, dtype=torch.float32).permute(2, 0, 1)
+        image = image.transpose(2, 0, 1)
 
         return image, sample_id
 
@@ -62,6 +59,15 @@ class EuroSatTestSet(Dataset):
         if torch.is_tensor(idx):
             idx = idx.tolist()
 
-        sample = self.samples[idx]
+        image, samp_id = self.samples[idx]
+        image = torch.tensor(image, dtype=torch.float32)
 
-        return sample
+        if self.transform:
+            image = self.transform(image)
+
+        if self.augment:
+            image = self.augment(image)
+
+        image = image.squeeze(0)
+
+        return image, samp_id
