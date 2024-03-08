@@ -9,11 +9,11 @@ class EuroSatCNN(nn.Module):
     def __init__(self, num_classes, num_channels, kernel_size):
         super(EuroSatCNN, self).__init__()
         self.conv_layer = nn.Sequential(
-            nn.Conv2d(in_channels=num_channels, out_channels=32, kernel_size=kernel_size, padding=2),  # Output: 32x64x64
+            nn.Conv2d(in_channels=num_channels, out_channels=32, kernel_size=kernel_size[0], padding=2),  # Output: 32x64x64
             nn.ReLU(),
             nn.MaxPool2d(kernel_size=2, stride=2),  # Output: 32x32x32
 
-            nn.Conv2d(in_channels=32, out_channels=64, kernel_size=kernel_size, padding=2),  # Output: 64x32x32
+            nn.Conv2d(in_channels=32, out_channels=64, kernel_size=kernel_size[1], padding=2),  # Output: 64x32x32
             nn.ReLU(),
             nn.MaxPool2d(kernel_size=2, stride=2)  # Output: 64x16x16
         )
@@ -36,7 +36,7 @@ class EuroSatCNN(nn.Module):
 
 
 class LitEuroSatCnn(pl.LightningModule):
-    def __init__(self, num_classes, num_channels, learning_rate=0.001, kernel_size=3, momentum=0.9, gamma=0.9):
+    def __init__(self, num_classes, num_channels, kernel_size, learning_rate=0.001, momentum=0.9, gamma=0.9):
         super(LitEuroSatCnn, self).__init__()
         self.model = EuroSatCNN(num_classes, num_channels, kernel_size)
         self.learning_rate = learning_rate
