@@ -1,5 +1,6 @@
 # Lightning logs
 lightning_logs/
+eurosat_luc/
 
 # Virtual environment
 .venv/
