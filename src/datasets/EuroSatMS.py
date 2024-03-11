@@ -1,4 +1,6 @@
 import os
+import sys
+import time
 
 import numpy as np
 import rasterio
@@ -16,44 +18,74 @@ c = bcolors()
 
 
 class EuroSatMS(Dataset):
-    def __init__(self, dataframe, root_dir, augment=None, transform=None, select_chan=None, n_jobs=-4):
+    def __init__(self,
+                 dataframe,
+                 root_dir,
+                 encoder,
+                 num_aug,
+                 augment=None,
+                 transform=None,
+                 select_chan=None,
+                 n_jobs=-4):
         self.dataframe = dataframe
         self.root_dir = root_dir
         self.transform = transform
         self.augment = augment
         self.select_chan = select_chan
+        self.num_aug = num_aug
 
-        self.enc = OneHotEncoder()
-        self.enc = self.enc.fit(dataframe[['label']].values.reshape(-1, 1))
-        save_object(self.enc, "data/on_hot_encoder")
+        self.enc = encoder
 
         print(f"\n{c.OKGREEN}Preloading images...{c.ENDC}")
-        print(f"{c.OKCYAN}Number of images: {len(dataframe)}{c.ENDC}")
-        print(f"{c.OKCYAN}Number of jobs:   {n_jobs} {c.ENDC}\n")
+        print(f"\n{c.OKCYAN}Images:         {len(dataframe)}{c.ENDC}")
+        print(f"{c.OKCYAN}Augmentations:  {len(dataframe) * self.num_aug}{c.ENDC}")
+        print(f"{c.OKCYAN}Jobs:           {n_jobs} {c.ENDC}\n")
 
-        # Process images in parallel
-        self.samples = Parallel(n_jobs=n_jobs)(
+        start_time = time.time()
+        result = Parallel(n_jobs=n_jobs)(
             delayed(self.process_image)(idx) for idx in range(len(dataframe))
         )
+
+        self.samples = []
+        self.targets = []
+        self.groups = []
+        self.aug_idx = []
+
+        for x, y, idx in result:
+            self.samples.append(x)
+            if self.augment:
+                for i in range(idx * self.num_aug, (idx + 1) * self.num_aug):
+                    self.aug_idx.append(i)
+                    self.groups.append(idx)
+                    self.targets.append(y)
+            else:
+                self.targets.append(y)
+                self.groups.append(idx)
+
+        self.samples = np.array(self.samples)
+        self.targets = np.array(self.targets)
+        end_time = time.time()
+        t = end_time - start_time
+        print(f"\n{c.OKBLUE}Time taken:      {int((t - (t % 60)) / 60)} min {t % 60} sec {c.ENDC}")
 
     def process_image(self, idx):
         img_path = os.path.join(self.root_dir, self.dataframe.iloc[idx, 0])
 
         with rasterio.open(img_path) as src:
-            image = np.array(src.read()).transpose(1, 2, 0)
+            image = np.array(src.read())
 
-        image = image[:, :, self.select_chan]
-        rgb_min = image.min()
-        rgb_max = image.max()
+        image = image[self.select_chan].astype(np.float32)
 
-        image = (image - rgb_min) / (rgb_max - rgb_min)
+        image = image / 10000
+        image = image.clip(0, 1)
 
-        image = image.transpose(2, 0, 1)
+        if 9 in self.select_chan:
+            b10_channel = np.zeros((1, 64, 64))
+            image[self.select_chan.index(9)] = b10_channel
 
-        label = self.dataframe.iloc[idx, 1]
-        target = self.enc.transform(np.array([label]).reshape(-1, 1)).toarray()
+        target = self.dataframe.iloc[idx, 1]
 
-        return image, target
+        return image, target, idx
 
     def __len__(self):
         return len(self.samples)
@@ -62,15 +94,17 @@ class EuroSatMS(Dataset):
         if torch.is_tensor(idx):
             idx = idx.tolist()
 
-        image, target = self.samples[idx]
+        image = self.samples[idx // self.num_aug]
         image = torch.tensor(image, dtype=torch.float32)
+
+        target = self.targets[idx]
+        target = self.enc.transform(np.array([target]).reshape(-1, 1)).toarray()
+        target = torch.tensor(target.flatten(), dtype=torch.float32)
+
+        if self.augment:
+            image = self.augment(image)
 
         if self.transform:
             image = self.transform(image)
-
-        if self.augment:
-            image = self.augment(image).squeeze(0)
-
-        target = torch.tensor(target.flatten(), dtype=torch.float32)
-
+        image = image.squeeze(0)
         return image, target

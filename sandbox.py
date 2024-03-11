@@ -1,4 +1,6 @@
 import os
+import sys
+
 import numpy as np
 import pandas as pd
 import rasterio
@@ -19,16 +21,11 @@ def process_image(idx):
     img_path = os.path.join(config.TRAIN_MS_DIR, df.iloc[idx, 0])
 
     with rasterio.open(img_path) as src:
-        image = np.array(src.read()).transpose(1, 2, 0)
+        image = np.array(src.read())
+    image = image[select_chan]
 
-    image = image[:, :, select_chan]
-    rgb_min = image.min()
-    rgb_max = image.max()
-
-    image = (image - rgb_min) / (rgb_max - rgb_min)
-
-    mean = np.mean(image, axis=(0, 1))
-    std = np.std(image, axis=(0, 1))
+    mean = np.mean(image, axis=(1, 2))
+    std = np.std(image, axis=(1, 2))
 
     return mean, std
 

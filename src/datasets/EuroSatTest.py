@@ -1,4 +1,5 @@
 import sys
+import time
 
 import numpy as np
 import pandas as pd
@@ -18,12 +19,13 @@ c = bcolors()
 
 
 class EuroSatTestSet(Dataset):
-    def __init__(self, root_dir, select_chan=[3, 2, 1], transform=None, augment=None, n_jobs=-4):
+    def __init__(self, root_dir, select_chan, transform=None, augment=None, add_b10=True, n_jobs=-4):
         self.root_dir = root_dir
         self.files = os.listdir(root_dir)
         self.transform = transform
         self.augment = augment
         self.select_chan = select_chan
+        self.add_b10 = add_b10
 
         self.enc = load_object("data/on_hot_encoder")
 
@@ -31,24 +33,41 @@ class EuroSatTestSet(Dataset):
         print(f"{c.OKCYAN}Number of images: {len(self.files)}{c.ENDC}")
         print(f"{c.OKCYAN}Number of jobs:   {n_jobs} {c.ENDC}\n")
 
-        self.samples = Parallel(n_jobs=n_jobs)(
+        start_time = time.time()
+        result = Parallel(n_jobs=n_jobs)(
             delayed(self.process_image)(idx) for idx in range(len(self.files))
         )
+
+        self.samples = []
+        self.sample_idx = []
+
+        for x, idx in result:
+            self.samples.append(x)
+            self.sample_idx.append(idx)
+
+        self.samples = np.array(self.samples).astype(np.float32)
+        end_time = time.time()
+        t = end_time - start_time
+        print(f"\n{c.OKBLUE}Time taken:      {int((t - (t % 60)) / 60)} min {t % 60} sec {c.ENDC}")
 
     def process_image(self, idx):
         img_path = os.path.join(self.root_dir, self.files[idx])
 
         sample_id = int(self.files[idx].split(".")[0].split("_")[1])
 
-        raw = np.load(img_path)
-        image = raw[:, :, self.select_chan]
+        image = np.load(img_path).transpose(2, 0, 1)
+        image = image[self.select_chan].astype(np.float32)
 
-        rgb_min = image.min()
-        rgb_max = image.max()
+        # if self.transform:
+        #     image = torch.tensor(image, dtype=torch.float32)
+        #     image = self.transform(image).squeeze(0).numpy()
 
-        image = (image - rgb_min) / (rgb_max - rgb_min)
+        image = image / 10000
+        image = image.clip(0, 1)
 
-        image = image.transpose(2, 0, 1)
+        if self.add_b10:
+            b10_channel = np.zeros((1, 64, 64))
+            image = np.insert(image, 3, b10_channel, axis=0)
 
         return image, sample_id
 
@@ -59,15 +78,14 @@ class EuroSatTestSet(Dataset):
         if torch.is_tensor(idx):
             idx = idx.tolist()
 
-        image, samp_id = self.samples[idx]
+        image = self.samples[idx]
         image = torch.tensor(image, dtype=torch.float32)
+        samp_id = self.sample_idx[idx]
+
+        if self.augment:
+            image = self.augment(image).squeeze(0)
 
         if self.transform:
             image = self.transform(image)
-
-        if self.augment:
-            image = self.augment(image)
-
-        image = image.squeeze(0)
 
         return image, samp_id

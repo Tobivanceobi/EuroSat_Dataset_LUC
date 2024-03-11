@@ -1,5 +1,5 @@
 # Lightning logs
-lightning_logs/
+checkpoints/
 eurosat_luc/
 
 # Virtual environment
