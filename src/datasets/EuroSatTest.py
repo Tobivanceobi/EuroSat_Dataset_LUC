@@ -62,8 +62,18 @@ class EuroSatTestSet(Dataset):
         #     image = torch.tensor(image, dtype=torch.float32)
         #     image = self.transform(image).squeeze(0).numpy()
 
-        image = image / 10000
+        # image = image / 10000
+        # image = image.clip(0, 1)
+
+        for channel in range(image.shape[0]):
+            rgb_min, rgb_max = image[channel].min(), image[channel].max()
+            if rgb_max - rgb_min == 0:
+                image[channel] = image[channel] - rgb_min
+            else:
+                image[channel] = (image[channel] - rgb_min) / (rgb_max - rgb_min)
         image = image.clip(0, 1)
+        # rgb_min, rgb_max = image.min(), image.max()
+        # image = (image - rgb_min) / (rgb_max - rgb_min)
 
         if self.add_b10:
             b10_channel = np.zeros((1, 64, 64))

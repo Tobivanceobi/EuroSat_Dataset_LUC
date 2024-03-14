@@ -1,5 +1,5 @@
 class Config:
-    DATA_DIR = 'data/'
+    DATA_DIR = '../data/'
     TRAIN_FILE = DATA_DIR + 'train.csv'
     TEST_FILE = DATA_DIR + 'test.csv'
     SAMPLE_SUBMISSION_FILE = DATA_DIR + 'sample_submission.csv'

@@ -76,8 +76,19 @@ class EuroSatMS(Dataset):
 
         image = image[self.select_chan].astype(np.float32)
 
-        image = image / 10000
+        # image = image / 10000
+        # image = image.clip(0, 1)
+
+        for channel in range(image.shape[0]):
+            rgb_min, rgb_max = image[channel].min(), image[channel].max()
+            if rgb_max - rgb_min == 0:
+                image[channel] = image[channel] - rgb_min
+            else:
+                image[channel] = (image[channel] - rgb_min) / (rgb_max - rgb_min)
         image = image.clip(0, 1)
+
+        # rgb_min, rgb_max = image.min(), image.max()
+        # image = (image - rgb_min) / (rgb_max - rgb_min)
 
         if 9 in self.select_chan:
             b10_channel = np.zeros((1, 64, 64))

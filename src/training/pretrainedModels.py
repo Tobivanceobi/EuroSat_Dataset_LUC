@@ -65,7 +65,7 @@ class EuroSatPreTrainedModel(pl.LightningModule):
         outputs = self(inputs)
         _, labels = torch.max(labels, 1)
         loss = self.criterion(outputs, labels)
-        self.log("train_loss", loss, prog_bar=True, on_step=False, on_epoch=True)
+        self.log("train_loss", loss, prog_bar=True, on_step=True, on_epoch=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
