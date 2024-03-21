@@ -33,8 +33,8 @@ class EuroSatPreTrainedModel(pl.LightningModule):
             num_features = self.backbone.classifier[-1].in_features
             self.backbone.classifier[-1] = nn.Identity()
         else:
-            num_features = self.backbone.fc.in_features
-            self.backbone.fc = nn.Identity()
+            num_features = self.backbone.fc.out_features
+
         self.classifier = nn.Linear(num_features, n_classes)
         self.classifier = nn.Sequential(
             nn.Linear(num_features, n_classes),
@@ -100,7 +100,7 @@ class EuroSatPreTrainedModel(pl.LightningModule):
         self.ep_true = []
 
     def configure_optimizers(self):
-        optimizer = optim.Adam(filter(lambda p: p.requires_grad, self.parameters()),
-                               lr=self.learning_rate, weight_decay=self.weight_decay)
+        optimizer = optim.SGD(filter(lambda p: p.requires_grad, self.parameters()),
+                              lr=self.learning_rate, weight_decay=self.weight_decay)
         scheduler = ExponentialLR(optimizer, gamma=self.gamma)
         return [optimizer], [scheduler]
