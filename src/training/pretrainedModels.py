@@ -16,6 +16,7 @@ class EuroSatPreTrainedModel(pl.LightningModule):
     def __init__(self,
                  backbone,
                  dropout,
+                 layers,
                  learning_rate,
                  weight_decay,
                  freeze_backbone=True,
@@ -32,16 +33,21 @@ class EuroSatPreTrainedModel(pl.LightningModule):
         if self.backbone.__class__.__name__ == "AlexNet":
             num_features = self.backbone.classifier[-1].in_features
             self.backbone.classifier[-1] = nn.Identity()
+        elif self.backbone.__class__.__name__ == "ViTForImageClassification":
+            num_features = self.backbone.classifier.out_features
         else:
             num_features = self.backbone.fc.out_features
 
-        self.classifier = nn.Linear(num_features, n_classes)
-        self.classifier = nn.Sequential(
-            nn.Linear(num_features, n_classes),
-            # nn.ReLU(),
-            # nn.Dropout(dropout),
-            # nn.Linear(256, n_classes)
-        )
+        self.classifier = nn.Sequential()
+        if len(layers) > 0:
+            for i, layer in enumerate(layers):
+                self.classifier.add_module(f"fc_{i}", nn.Linear(num_features, layer))
+                self.classifier.add_module(f"relu_{i}", nn.ReLU())
+                self.classifier.add_module(f"dropout_{i}", nn.Dropout(p=dropout))
+                num_features = layer
+            self.classifier.add_module(f"fc_out", nn.Linear(num_features, n_classes))
+        else:
+            self.classifier = nn.Linear(num_features, n_classes)
 
         for param in self.classifier.parameters():
             param.requires_grad = True
@@ -96,6 +102,8 @@ class EuroSatPreTrainedModel(pl.LightningModule):
         correct = np.sum(all_preds == all_true)
         self.accuracy = correct / len(all_true)
         self.log('test_accuracy', self.accuracy, prog_bar=True, on_step=False, on_epoch=True)
+
+    def on_test_epoch_start(self) -> None:
         self.ep_out = []
         self.ep_true = []
 

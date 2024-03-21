@@ -7,7 +7,7 @@ import rasterio
 import torch
 from PIL import Image
 from joblib import Parallel, delayed
-from sklearn.preprocessing import OneHotEncoder
+from sklearn.preprocessing import OneHotEncoder, RobustScaler
 from torch.utils.data import Dataset
 from torchvision import transforms
 
@@ -89,6 +89,7 @@ class EuroSatMS(Dataset):
 
         # rgb_min, rgb_max = image.min(), image.max()
         # image = (image - rgb_min) / (rgb_max - rgb_min)
+        # image = image.clip(0, 1)
 
         if 9 in self.select_chan:
             b10_channel = np.zeros((1, 64, 64))
@@ -116,6 +117,8 @@ class EuroSatMS(Dataset):
             image = self.augment(image)
 
         if self.transform:
+            image = image.squeeze(0)
+            image = transforms.ToPILImage()(image)
             image = self.transform(image)
         image = image.squeeze(0)
         return image, target

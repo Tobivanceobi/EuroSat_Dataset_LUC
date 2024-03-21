@@ -27,7 +27,7 @@ class EuroSatTestSet(Dataset):
         self.select_chan = select_chan
         self.add_b10 = add_b10
 
-        self.enc = load_object("data/on_hot_encoder")
+        self.enc = load_object("../data/on_hot_encoder")
 
         print(f"\n{c.OKGREEN}Preloading images...{c.ENDC}")
         print(f"{c.OKCYAN}Number of images: {len(self.files)}{c.ENDC}")
@@ -74,6 +74,7 @@ class EuroSatTestSet(Dataset):
         image = image.clip(0, 1)
         # rgb_min, rgb_max = image.min(), image.max()
         # image = (image - rgb_min) / (rgb_max - rgb_min)
+        # image = image.clip(0, 1)
 
         if self.add_b10:
             b10_channel = np.zeros((1, 64, 64))
