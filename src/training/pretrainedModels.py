@@ -33,8 +33,9 @@ class EuroSatPreTrainedModel(pl.LightningModule):
         if self.backbone.__class__.__name__ == "AlexNet":
             num_features = self.backbone.classifier[-1].in_features
             self.backbone.classifier[-1] = nn.Identity()
-        elif self.backbone.__class__.__name__ == "ViTForImageClassification":
-            num_features = self.backbone.classifier.out_features
+        elif self.backbone.__class__.__name__ == "VisionTransformer":
+            num_features = self.backbone.heads[0].in_features
+            self.backbone.heads = nn.Identity()
         else:
             num_features = self.backbone.fc.out_features
 

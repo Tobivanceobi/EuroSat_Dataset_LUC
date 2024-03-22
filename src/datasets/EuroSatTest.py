@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 from torch.utils.data import Dataset
 from sklearn.preprocessing import OneHotEncoder
 from joblib import Parallel, delayed
+from torchvision.transforms import transforms
 
 from src.colors import bcolors
 from src.pickle_loader import load_object
@@ -94,9 +95,11 @@ class EuroSatTestSet(Dataset):
         samp_id = self.sample_idx[idx]
 
         if self.augment:
-            image = self.augment(image).squeeze(0)
+            image = self.augment(image)
 
         if self.transform:
+            image = image
+            image = transforms.ToPILImage()(image)
             image = self.transform(image)
-
+        image = image.squeeze(0)
         return image, samp_id
