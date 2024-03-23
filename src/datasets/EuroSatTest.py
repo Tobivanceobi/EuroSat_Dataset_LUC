@@ -13,10 +13,12 @@ from sklearn.preprocessing import OneHotEncoder
 from joblib import Parallel, delayed
 from torchvision.transforms import transforms
 
+from config import Config
 from src.colors import bcolors
 from src.pickle_loader import load_object
 
 c = bcolors()
+config = Config()
 
 
 class EuroSatTestSet(Dataset):
@@ -28,7 +30,7 @@ class EuroSatTestSet(Dataset):
         self.select_chan = select_chan
         self.add_b10 = add_b10
 
-        self.enc = load_object("../data/on_hot_encoder")
+        self.enc = load_object(config.DATA_DIR + "on_hot_encoder")
 
         print(f"\n{c.OKGREEN}Preloading images...{c.ENDC}")
         print(f"{c.OKCYAN}Number of images: {len(self.files)}{c.ENDC}")
@@ -59,23 +61,16 @@ class EuroSatTestSet(Dataset):
         image = np.load(img_path).transpose(2, 0, 1)
         image = image[self.select_chan].astype(np.float32)
 
-        # if self.transform:
-        #     image = torch.tensor(image, dtype=torch.float32)
-        #     image = self.transform(image).squeeze(0).numpy()
-
-        # image = image / 10000
+        # for channel in range(image.shape[0]):
+        #     rgb_min, rgb_max = image[channel].min(), image[channel].max()
+        #     if rgb_max - rgb_min == 0:
+        #         image[channel] = image[channel] - rgb_min
+        #     else:
+        #         image[channel] = (image[channel] - rgb_min) / (rgb_max - rgb_min)
         # image = image.clip(0, 1)
-
-        for channel in range(image.shape[0]):
-            rgb_min, rgb_max = image[channel].min(), image[channel].max()
-            if rgb_max - rgb_min == 0:
-                image[channel] = image[channel] - rgb_min
-            else:
-                image[channel] = (image[channel] - rgb_min) / (rgb_max - rgb_min)
+        rgb_min, rgb_max = image.min(), image.max()
+        image = (image - rgb_min) / (rgb_max - rgb_min)
         image = image.clip(0, 1)
-        # rgb_min, rgb_max = image.min(), image.max()
-        # image = (image - rgb_min) / (rgb_max - rgb_min)
-        # image = image.clip(0, 1)
 
         if self.add_b10:
             b10_channel = np.zeros((1, 64, 64))
@@ -98,8 +93,7 @@ class EuroSatTestSet(Dataset):
             image = self.augment(image)
 
         if self.transform:
-            image = image
-            image = transforms.ToPILImage()(image)
             image = self.transform(image)
+
         image = image.squeeze(0)
         return image, samp_id

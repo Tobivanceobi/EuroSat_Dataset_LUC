@@ -1,11 +1,19 @@
 import numpy as np
 import pytorch_lightning as pl
 import torch
-from pytorch_lightning import Callback
+from kornia.constants import Resample
+from tabulate import tabulate
+from torchvision.transforms import InterpolationMode
+from torchvision.models import ViT_H_14_Weights, ViT_B_16_Weights, ViT_B_32_Weights, ViT_L_16_Weights, ViT_L_32_Weights
+import torchvision
+from torchvision import transforms
+import torchgeo.models as models
+from torchgeo.models import ResNet18_Weights, ResNet50_Weights
 from torch import optim, nn
 from torch.optim.lr_scheduler import ExponentialLR
 from torchvision import models
 from torchvision.models import ResNet50_Weights
+import kornia.augmentation as K
 
 from src.colors import bcolors
 
@@ -24,44 +32,73 @@ class EuroSatPreTrainedModel(pl.LightningModule):
                  gamma=0.9,
                  n_classes=10):
         super(EuroSatPreTrainedModel, self).__init__()
+
         self.backbone = backbone
         self.weight_decay = weight_decay
-        if freeze_backbone:
-            for param in self.backbone.parameters():
-                param.requires_grad = False
-
-        if self.backbone.__class__.__name__ == "AlexNet":
-            num_features = self.backbone.classifier[-1].in_features
-            self.backbone.classifier[-1] = nn.Identity()
-        elif self.backbone.__class__.__name__ == "VisionTransformer":
-            num_features = self.backbone.heads[0].in_features
-            self.backbone.heads = nn.Identity()
-        else:
-            num_features = self.backbone.fc.out_features
-
-        self.classifier = nn.Sequential()
-        if len(layers) > 0:
-            for i, layer in enumerate(layers):
-                self.classifier.add_module(f"fc_{i}", nn.Linear(num_features, layer))
-                self.classifier.add_module(f"relu_{i}", nn.ReLU())
-                self.classifier.add_module(f"dropout_{i}", nn.Dropout(p=dropout))
-                num_features = layer
-            self.classifier.add_module(f"fc_out", nn.Linear(num_features, n_classes))
-        else:
-            self.classifier = nn.Linear(num_features, n_classes)
-
-        for param in self.classifier.parameters():
-            param.requires_grad = True
-
         self.learning_rate = learning_rate
         self.momentum = momentum
         self.gamma = gamma
 
         self.criterion = nn.CrossEntropyLoss()
+        self.classifier = nn.Sequential()
 
         self.accuracy = 0.0
         self.ep_out = []
         self.ep_true = []
+        self.num_features = 0
+
+        # Get the number of features in the last layer of the backbone
+        if self.backbone.__class__.__name__ == "AlexNet":
+            self.num_features = self.backbone.classifiergit .in_features
+            self.backbone.classifier[-1] = nn.Identity()
+        elif self.backbone.__class__.__name__ == "VisionTransformer":
+            self.num_features = self.backbone.heads[0].in_features
+            self.backbone.heads = nn.Identity()
+        else:
+            self.num_features = self.backbone.fc.out_features
+
+        # Cunstruct the classifier
+        if len(layers) > 0:
+            for i, layer in enumerate(layers):
+                self.classifier.add_module(f"fc_{i}", nn.Linear(self.num_features, layer))
+                self.classifier.add_module(f"relu_{i}", nn.ReLU())
+                self.classifier.add_module(f"dropout_{i}", nn.Dropout(p=dropout))
+                self.num_features = layer
+            self.classifier.add_module(f"fc_out", nn.Linear(self.num_features, n_classes))
+        else:
+            self.classifier = nn.Linear(self.num_features, n_classes)
+
+        # Freeze the backbone
+        if freeze_backbone:
+            for param in self.backbone.parameters():
+                param.requires_grad = False
+
+        # Unfreeze the classifier
+        for param in self.classifier.parameters():
+            param.requires_grad = True
+
+    def unfreeze_model_layers(self, n_layers):
+        print(f"{c.OKGREEN}Unfreezing {n_layers} layers of the backbone...{c.ENDC}")
+
+        for param in self.backbone.encoder.ln.parameters():
+            param.requires_grad = True
+        n_layers -= 1
+
+        if n_layers > 0:
+            total_layers = len(self.backbone.encoder.layers)
+            first_layer_to_unfreeze = max(0, total_layers - n_layers)
+
+            for i in range(first_layer_to_unfreeze, total_layers):
+                layer = self.backbone.encoder.layers[i]
+                for param in layer.parameters():
+                    param.requires_grad = True
+
+        tabel = []
+        for name, param in self.backbone.named_parameters():
+            num_params = f"{param.numel() // 1000}k"
+            tabel.append([f"{c.OKGREEN}{name}{c.ENDC}", f"{c.OKBLUE}{param.requires_grad}{c.ENDC}", num_params])
+
+        print(tabulate(tabel, headers=[f"{c.OKGREEN}Layer{c.ENDC}", f"{c.OKBLUE}Trainable{c.ENDC}", f"Parameters"]))
 
     def forward(self, x):
         x = self.backbone(x)
@@ -113,3 +150,40 @@ class EuroSatPreTrainedModel(pl.LightningModule):
                               lr=self.learning_rate, weight_decay=self.weight_decay)
         scheduler = ExponentialLR(optimizer, gamma=self.gamma)
         return [optimizer], [scheduler]
+
+
+def get_pretrained_model(model_name):
+    if "resnet18_RGB_MOCO" in model_name:
+        return models.resnet18(weights=ResNet18_Weights.SENTINEL2_RGB_MOCO), None
+    elif "resnet50_RGB_MOCO" in model_name:
+        return models.resnet50(weights=ResNet50_Weights.SENTINEL2_RGB_MOCO), None
+    elif "resnet50_MS_SECO" in model_name:
+        return models.resnet50(weights=ResNet50_Weights.SENTINEL2_RGB_SECO), None
+    elif "vit_b_16" in model_name:
+        tf = transforms.Compose([
+            K.Resize(256, resample=Resample.BILINEAR.BILINEAR),
+            K.CenterCrop(224),
+            K.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        ])
+        return torchvision.models.vit_b_16(weights=ViT_B_16_Weights.IMAGENET1K_V1), tf
+    elif "vit_b_32" in model_name:
+        tf = transforms.Compose([
+            K.Resize(256, resample=Resample.BILINEAR.BILINEAR),
+            K.CenterCrop(224),
+            K.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        ])
+        return torchvision.models.vit_b_32(weights=ViT_B_32_Weights.IMAGENET1K_V1), tf
+    elif "vit_l_16" in model_name:
+        tf = transforms.Compose([
+            K.Resize(242, resample=Resample.BILINEAR.BILINEAR),
+            K.CenterCrop(224),
+            K.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        ])
+        return torchvision.models.vit_l_16(weights=ViT_L_16_Weights.IMAGENET1K_V1), tf
+    elif "vit_l_32" in model_name:
+        tf = transforms.Compose([
+            K.Resize(256, resample=Resample.BILINEAR.BILINEAR),
+            K.CenterCrop(224),
+            K.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        ])
+        return torchvision.models.vit_l_32(weights=ViT_L_32_Weights.IMAGENET1K_V1), tf
