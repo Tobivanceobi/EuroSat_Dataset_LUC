@@ -16,6 +16,16 @@ from src.pickle_loader import save_object
 c = bcolors()
 
 
+def normalize(img, means, stds):
+    if len(means) == 3:
+        for i, (mean, std) in enumerate(zip(means, stds)):
+            min_value = mean - 2 * std
+            max_value = mean + 2 * std
+            img[i] = (img[i] - min_value) / (max_value - min_value) * 255.0
+            img[i] = np.clip(img[i], 0, 255).astype(np.uint8)
+    return img
+
+
 class EuroSatMS(Dataset):
     def __init__(self,
                  dataframe,
@@ -25,6 +35,7 @@ class EuroSatMS(Dataset):
                  transform,
                  augment=None,
                  select_chan=None,
+                 mean_std=None,
                  n_jobs=-4):
         self.dataframe = dataframe
         self.root_dir = root_dir
@@ -32,6 +43,7 @@ class EuroSatMS(Dataset):
         self.augment = augment
         self.select_chan = select_chan
         self.num_aug = num_aug
+        self.mean_std = mean_std
 
         self.enc = encoder
 
@@ -75,16 +87,8 @@ class EuroSatMS(Dataset):
 
         image = image[self.select_chan].astype(np.float32)
 
-        # image = image / 10000
-        # image = image.clip(0, 1)
-
-        # for channel in range(image.shape[0]):
-        #     rgb_min, rgb_max = image[channel].min(), image[channel].max()
-        #     if rgb_max - rgb_min == 0:
-        #         image[channel] = image[channel] - rgb_min
-        #     else:
-        #         image[channel] = (image[channel] - rgb_min) / (rgb_max - rgb_min)
-        # image = image.clip(0, 1)
+        if self.mean_std:
+            image = normalize(image, self.mean_std['mean'], self.mean_std['std'])
 
         rgb_min, rgb_max = image.min(), image.max()
         image = (image - rgb_min) / (rgb_max - rgb_min)

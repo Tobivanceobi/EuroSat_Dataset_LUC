@@ -26,17 +26,17 @@ class UNetLightningModule(pl.LightningModule):
         return self.model(x)
 
     def training_step(self, batch, batch_idx):
-        inputs, b10_channel = batch
-        b10_pred = self(inputs)
-        loss = 1 - self.criterion(b10_pred, b10_channel.unsqueeze(1))
+        inputs, 10_channel = batch
+        10_pred = self(inputs)
+        loss = 1 - self.criterion(10_pred, 10_channel.unsqueeze(1))
         loss = loss.mean(dim=[2, 3]).sum()
         self.log('train_loss', loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
-        inputs, b10_channel = batch
-        b10_pred = self(inputs)
-        loss = 1 - self.criterion(b10_pred, b10_channel.unsqueeze(1))
+        inputs, 10_channel = batch
+        10_pred = self(inputs)
+        loss = 1 - self.criterion(10_pred, 10_channel.unsqueeze(1))
         loss = loss.mean(dim=[2, 3]).sum()
         self.log('val_loss', loss, on_step=False, on_epoch=True, prog_bar=True, logger=True)
 

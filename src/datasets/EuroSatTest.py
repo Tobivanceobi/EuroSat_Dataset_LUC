@@ -21,14 +21,26 @@ c = bcolors()
 config = Config()
 
 
+def normalize(img, means, stds):
+    if len(means) == 3:
+        for i, (mean, std) in enumerate(zip(means, stds)):
+            min_value = mean - 2 * std
+            max_value = mean + 2 * std
+            img[i] = (img[i] - min_value) / (max_value - min_value) * 255.0
+            img[i] = np.clip(img[i], 0, 255).astype(np.uint8)
+    return img
+
+
 class EuroSatTestSet(Dataset):
-    def __init__(self, root_dir, select_chan, transform=None, augment=None, add_b10=True, n_jobs=-4):
+    def __init__(self, root_dir, select_chan, transform=None, mean_std=None, augment=None, add_B10=True, n_jobs=-4):
         self.root_dir = root_dir
         self.files = os.listdir(root_dir)
         self.transform = transform
         self.augment = augment
         self.select_chan = select_chan
-        self.add_b10 = add_b10
+        self.add_B10 = add_B10
+
+        self.mean_std = mean_std
 
         self.enc = load_object(config.DATA_DIR + "on_hot_encoder")
 
@@ -61,20 +73,16 @@ class EuroSatTestSet(Dataset):
         image = np.load(img_path).transpose(2, 0, 1)
         image = image[self.select_chan].astype(np.float32)
 
-        # for channel in range(image.shape[0]):
-        #     rgb_min, rgb_max = image[channel].min(), image[channel].max()
-        #     if rgb_max - rgb_min == 0:
-        #         image[channel] = image[channel] - rgb_min
-        #     else:
-        #         image[channel] = (image[channel] - rgb_min) / (rgb_max - rgb_min)
-        # image = image.clip(0, 1)
+        if self.mean_std:
+            image = normalize(image, self.mean_std['mean'], self.mean_std['std'])
+
         rgb_min, rgb_max = image.min(), image.max()
         image = (image - rgb_min) / (rgb_max - rgb_min)
         image = image.clip(0, 1)
 
-        if self.add_b10:
-            b10_channel = np.zeros((1, 64, 64))
-            image = np.insert(image, 3, b10_channel, axis=0)
+        if self.add_B10:
+            B10_channel = np.zeros((1, 64, 64))
+            image = np.insert(image, 3, B10_channel, axis=0)
 
         return image, sample_id
 

@@ -14,7 +14,7 @@ from src.pickle_loader import save_object
 c = bcolors()
 
 
-class EuroSatMSB10(Dataset):
+class EuroSatMS10(Dataset):
     def __init__(self,
                  dataframe,
                  root_dir,

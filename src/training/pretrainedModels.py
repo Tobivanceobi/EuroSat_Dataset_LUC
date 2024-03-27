@@ -3,16 +3,13 @@ import pytorch_lightning as pl
 import torch
 from kornia.constants import Resample
 from tabulate import tabulate
-from torchvision.transforms import InterpolationMode
-from torchvision.models import ViT_H_14_Weights, ViT_B_16_Weights, ViT_B_32_Weights, ViT_L_16_Weights, ViT_L_32_Weights
+from torchvision.models import ViT_B_16_Weights, ViT_B_32_Weights, ViT_L_16_Weights, ViT_L_32_Weights
 import torchvision
 from torchvision import transforms
 import torchgeo.models as models
 from torchgeo.models import ResNet18_Weights, ResNet50_Weights
 from torch import optim, nn
 from torch.optim.lr_scheduler import ExponentialLR
-from torchvision import models
-from torchvision.models import ResNet50_Weights
 import kornia.augmentation as K
 
 from src.colors import bcolors
@@ -55,7 +52,8 @@ class EuroSatPreTrainedModel(pl.LightningModule):
             self.num_features = self.backbone.heads[0].in_features
             self.backbone.heads = nn.Identity()
         else:
-            self.num_features = self.backbone.fc.out_features
+            self.num_features = self.backbone.fc.in_features
+            self.backbone.fc = nn.Identity()
 
         # Cunstruct the classifier
         if len(layers) > 0:
@@ -79,7 +77,6 @@ class EuroSatPreTrainedModel(pl.LightningModule):
 
     def unfreeze_model_layers(self, n_layers):
         print(f"{c.OKGREEN}Unfreezing {n_layers} layers of the backbone...{c.ENDC}")
-
         for param in self.backbone.encoder.ln.parameters():
             param.requires_grad = True
         n_layers -= 1
@@ -153,12 +150,18 @@ class EuroSatPreTrainedModel(pl.LightningModule):
 
 
 def get_pretrained_model(model_name):
+    tf_0 = transforms.Compose([
+        K.Resize(256, resample=Resample.BILINEAR.BILINEAR),
+        K.CenterCrop(224),
+        K.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    ])
+
     if "resnet18_RGB_MOCO" in model_name:
-        return models.resnet18(weights=ResNet18_Weights.SENTINEL2_RGB_MOCO), None
+        return models.resnet18(weights=ResNet18_Weights.SENTINEL2_RGB_MOCO), tf_0
     elif "resnet50_RGB_MOCO" in model_name:
-        return models.resnet50(weights=ResNet50_Weights.SENTINEL2_RGB_MOCO), None
-    elif "resnet50_MS_SECO" in model_name:
-        return models.resnet50(weights=ResNet50_Weights.SENTINEL2_RGB_SECO), None
+        return models.resnet50(weights=ResNet50_Weights.SENTINEL2_RGB_MOCO), tf_0
+    elif "resnet50_RGB_SECO" in model_name:
+        return models.resnet50(weights=ResNet50_Weights.SENTINEL2_RGB_SECO), tf_0
     elif "vit_b_16" in model_name:
         tf = transforms.Compose([
             K.Resize(256, resample=Resample.BILINEAR.BILINEAR),
