@@ -3,7 +3,7 @@ import pytorch_lightning as pl
 import torch
 from kornia.constants import Resample
 from tabulate import tabulate
-from torchvision.models import ViT_B_16_Weights, ViT_B_32_Weights, ViT_L_16_Weights, ViT_L_32_Weights
+from torchvision.models import ViT_B_16_Weights, ViT_B_32_Weights, ViT_L_16_Weights, ViT_L_32_Weights, ResNet50_Weights
 import torchvision
 from torchvision import transforms
 import torchgeo.models as models
@@ -24,6 +24,7 @@ class EuroSatPreTrainedModel(pl.LightningModule):
                  layers,
                  learning_rate,
                  weight_decay,
+                 opt="adam",
                  freeze_backbone=True,
                  momentum=0.9,
                  gamma=0.9,
@@ -35,6 +36,7 @@ class EuroSatPreTrainedModel(pl.LightningModule):
         self.learning_rate = learning_rate
         self.momentum = momentum
         self.gamma = gamma
+        self.opt = opt
 
         self.criterion = nn.CrossEntropyLoss()
         self.classifier = nn.Sequential()
@@ -109,12 +111,26 @@ class EuroSatPreTrainedModel(pl.LightningModule):
         self.log("train_loss", loss, prog_bar=True, on_step=True, on_epoch=True)
         return loss
 
+    def on_validation_epoch_start(self) -> None:
+        self.ep_out = []
+        self.ep_true = []
+
     def validation_step(self, batch, batch_idx):
         inputs, labels = batch
         outputs = self(inputs)
         _, labels = torch.max(labels, 1)
+        _, predicted = torch.max(outputs, 1)
+        self.ep_out.append(predicted.cpu().numpy())
+        self.ep_true.append(labels.cpu().numpy())
         loss = self.criterion(outputs, labels)
         self.log('val_loss', loss, prog_bar=True, on_step=False, on_epoch=True)
+
+    def on_validation_epoch_end(self):
+        all_preds = np.concatenate(self.ep_out)
+        all_true = np.concatenate(self.ep_true)
+        correct = np.sum(all_preds == all_true)
+        self.accuracy = correct / len(all_true)
+        self.log('val_acc', self.accuracy, prog_bar=True, on_step=False, on_epoch=True)
 
     def test_step(self, batch, batch_idx):
         inputs, labels = batch
@@ -129,7 +145,7 @@ class EuroSatPreTrainedModel(pl.LightningModule):
         self.ep_true.append(labels.cpu().numpy())
 
         self.log('test_loss', loss, prog_bar=True, on_step=False, on_epoch=True)
-        self.log('test_accuracy', self.accuracy, prog_bar=True, on_step=True, on_epoch=True)
+        self.log('test_acc', self.accuracy, prog_bar=True, on_step=True, on_epoch=True)
 
     def on_test_epoch_end(self):
         all_preds = np.concatenate(self.ep_out)
@@ -143,8 +159,19 @@ class EuroSatPreTrainedModel(pl.LightningModule):
         self.ep_true = []
 
     def configure_optimizers(self):
-        optimizer = optim.SGD(filter(lambda p: p.requires_grad, self.parameters()),
-                              lr=self.learning_rate, weight_decay=self.weight_decay)
+        if self.opt == "sgd":
+            optimizer = optim.SGD(
+                params=filter(lambda p: p.requires_grad, self.parameters()),
+                lr=self.learning_rate,
+                weight_decay=self.weight_decay,
+                momentum=self.momentum
+            )
+        else:
+            optimizer = optim.Adam(
+                params=filter(lambda p: p.requires_grad, self.parameters()),
+                lr=self.learning_rate,
+                weight_decay=self.weight_decay
+            )
         scheduler = ExponentialLR(optimizer, gamma=self.gamma)
         return [optimizer], [scheduler]
 
@@ -156,12 +183,30 @@ def get_pretrained_model(model_name):
         K.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
 
+    tf_1 = transforms.Compose([
+        K.RandomHorizontalFlip(p=0.75),
+        K.RandomVerticalFlip(p=0.75),
+        K.RandomAffine(degrees=30, translate=None, scale=None, shear=None, resample="nearest", padding_mode=2, p=0.75),
+        K.RandomShear(shear=0.2, resample="nearest", padding_mode=2, p=0.75),
+        K.RandomBrightness((0.6, 1.4), p=0.6),
+        K.RandomContrast(contrast=(0.6, 1.4), p=0.6),
+        K.RandomSaturation((0.6, 1.4), p=0.6),
+        K.RandomResizedCrop((56, 56)),
+    ])
+
     if "resnet18_RGB_MOCO" in model_name:
         return models.resnet18(weights=ResNet18_Weights.SENTINEL2_RGB_MOCO), tf_0
     elif "resnet50_RGB_MOCO" in model_name:
-        return models.resnet50(weights=ResNet50_Weights.SENTINEL2_RGB_MOCO), tf_0
+        return models.resnet50(weights=ResNet50_Weights.SENTINEL2_RGB_MOCO), tf_1
     elif "resnet50_RGB_SECO" in model_name:
         return models.resnet50(weights=ResNet50_Weights.SENTINEL2_RGB_SECO), tf_0
+    elif "resnet50_RGB" in model_name:
+        tf = transforms.Compose([
+            K.Resize(256, resample=Resample.BILINEAR.BILINEAR),
+            K.CenterCrop(224),
+            K.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        ])
+        return torchvision.models.resnet50(weights=torchvision.models.ResNet50_Weights.IMAGENET1K_V2), tf
     elif "vit_b_16" in model_name:
         tf = transforms.Compose([
             K.Resize(256, resample=Resample.BILINEAR.BILINEAR),

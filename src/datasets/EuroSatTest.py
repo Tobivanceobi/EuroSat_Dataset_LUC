@@ -73,12 +73,17 @@ class EuroSatTestSet(Dataset):
         image = np.load(img_path).transpose(2, 0, 1)
         image = image[self.select_chan].astype(np.float32)
 
-        if self.mean_std:
-            image = normalize(image, self.mean_std['mean'], self.mean_std['std'])
+        # if self.mean_std:
+        #     image = normalize(image, self.mean_std['mean'], self.mean_std['std'])
+        #
+        # rgb_min, rgb_max = image.min(), image.max()
+        # image = (image - rgb_min) / (rgb_max - rgb_min)
+        # image = image / 10000
+        # image = image.clip(0, 1)
 
-        rgb_min, rgb_max = image.min(), image.max()
-        image = (image - rgb_min) / (rgb_max - rgb_min)
-        image = image.clip(0, 1)
+        for channel in range(len(self.select_chan)):
+            rgb_min, rgb_max = image[channel].min(), image[channel].max()
+            image[channel] = (image[channel] - rgb_min) / (rgb_max - rgb_min)
 
         if self.add_B10:
             B10_channel = np.zeros((1, 64, 64))

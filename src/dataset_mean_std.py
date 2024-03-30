@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 import rasterio
 from joblib import Parallel, delayed
+from matplotlib import pyplot as plt
 
 from config import Config
 from src.pickle_loader import save_object

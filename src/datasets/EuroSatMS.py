@@ -82,17 +82,24 @@ class EuroSatMS(Dataset):
     def process_image(self, idx):
         img_path = os.path.join(self.root_dir, self.dataframe.iloc[idx, 0])
 
-        with rasterio.open(img_path) as src:
-            image = np.array(src.read())
+        if ".npy" in img_path:
+            image = np.load(img_path).transpose(2, 0, 1)
+        else:
+            with rasterio.open(img_path) as src:
+                image = np.array(src.read())
 
         image = image[self.select_chan].astype(np.float32)
 
-        if self.mean_std:
-            image = normalize(image, self.mean_std['mean'], self.mean_std['std'])
-
-        rgb_min, rgb_max = image.min(), image.max()
-        image = (image - rgb_min) / (rgb_max - rgb_min)
-        image = image.clip(0, 1)
+        # if self.mean_std:
+        #     image = normalize(image, self.mean_std['mean'], self.mean_std['std'])
+        #
+        # rgb_min, rgb_max = image.min(), image.max()
+        # image = (image - rgb_min) / (rgb_max - rgb_min)
+        # image = image / 10000
+        # image = image.clip(0, 1)
+        for channel in range(len(self.select_chan)):
+            rgb_min, rgb_max = image[channel].min(), image[channel].max()
+            image[channel] = (image[channel] - rgb_min) / (rgb_max - rgb_min)
 
         if 9 in self.select_chan:
             b10_channel = np.zeros((1, 64, 64))
