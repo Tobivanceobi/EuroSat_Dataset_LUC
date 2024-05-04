@@ -1,6 +1,7 @@
 # Lightning logs
 checkpoints/
 eurosat_luc/
+.idea/
 
 # Virtual environment
 .venv/
