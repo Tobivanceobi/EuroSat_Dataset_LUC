@@ -1,4 +1,5 @@
 checkpoints/
 wandb/
 .idea/
+.venv/
 *.csv
