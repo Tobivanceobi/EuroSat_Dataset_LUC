@@ -1,0 +1,13 @@
+pytorch-lightning
+torch
+torchvision
+kornia
+numpy
+pandas
+scikit-image
+scikit-learn
+opencv-python
+tabulate
+wandb
+torchgeo
+matplotlib
